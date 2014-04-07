@@ -1,3 +1,7 @@
+[B]Version 1.0.2[/B]
+- Updated new live url.
+- Little improvements.
+
 [B]Version 1.0.1[/B]
 - Updated the url of live.
 - Added the shows.
