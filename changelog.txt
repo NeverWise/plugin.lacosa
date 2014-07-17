@@ -1,6 +1,10 @@
+[B]Version 1.0.3[/B]
+- Updated to the new neverwise library.
+- Small bugfix/improvements.
+
 [B]Version 1.0.2[/B]
 - Updated new live url.
-- Little improvements.
+- Small improvements.
 
 [B]Version 1.0.1[/B]
 - Updated the url of live.

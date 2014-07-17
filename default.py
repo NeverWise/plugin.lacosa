@@ -1,69 +1,95 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-# Version 1.0.2 (16/09/2013)
-# La Cosa
-# Organo di comunicazione Movimento 5 Stelle.
-# By NeverWise
-# <mail>
-# <url>
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#######################################################################
-import sys, re, xbmcplugin, tools#, datetime
+import sys, re, xbmcplugin, xbmcgui#, datetime
+from neverwise import Util
+
+
+class LaCosa:
+
+  __handle = int(sys.argv[1])
+  __params = Util.urlParametersToDict(sys.argv[2])
+  __idPlugin = 'plugin.lacosa'
+  __namePlugin = 'La Cosa'
+  __itemsNumber = 0
+
+  def __init__(self):
+
+    if len(self.__params) == 0: # Visualizzazione del menu.
+
+      # Diretta.
+      live = self.__getLaCosaResponse('')
+      if live != None:
+        phpPage = re.compile('<div class="box_bottom">.+?<script src="(.+?)">').findall(live)[0]
+        img = re.compile('<div class="logo.+?<img.+?src="(.+?)".+?/>').findall(live)[0]
+        live = Util(phpPage).getHtml()
+        if live != None:
+          url = '{0}.m3u8'.format(re.compile('file: "(.+?)\.m3u8"').findall(live)[0])
+          Util.addItem(self.__handle, Util.getTranslation(self.__idPlugin, 30001), img, '', 'video', { 'title' : self.__namePlugin }, None, url, False) # Diretta.
+          self.__itemsNumber += 1
+
+      # Shows.
+      shows = self.__getLaCosaResponse('/rubriche')
+      if shows != None:
+        shows = re.compile('<div class="icon_programmi"> <a href="(.+?)"><img.+?src="(.+?)".+?/></a>.+?<a.+?>(.+?)</a>.+?<p>(.+?)</p>').findall(shows)
+        for link, img, title, descr in shows:
+          title = Util.normalizeText(title)
+          Util.addItem(self.__handle, title, img, '', 'video', { 'title' : title, 'plot' : Util.normalizeText(Util.trimTags(descr)) }, None, { 'id' : 's', 'page' : link }, True)
+          self.__itemsNumber += 1
+
+      if (live == None or not live) and (shows == None or not shows): # Se sono vuoti oppure liste vuote.
+        Util.showConnectionErrorDialog(self.__namePlugin) # Errore connessione internet!
+      elif live == None or not live:
+        xbmcgui.Dialog().ok(self.__namePlugin, Util.getTranslation(self.__idPlugin, 30002)) # Errore recupero stream diretta.
+      elif shows == None or not shows:
+        xbmcgui.Dialog().ok(self.__namePlugin, Util.getTranslation(self.__idPlugin, 30003)) # Errore recupero streams shows.
+
+    else:
+
+      response = Util(self.__params['page']).getHtmlDialog(self.__namePlugin)
+      if response != None:
+
+        # Videos.
+        if self.__params['id'] == 's': # Visualizzazione video di uno show.
+          videos = re.compile('<div.+?id="recenti_canale">(.+?)<div class="pagination">').findall(response)[0]
+          videos = re.compile('<a class="videoThumbnail.+?href="(.+?)">.+?<img.+?src="(.+?)".+?/>.+?(<span class="videoTime">.+?</span>)?</a>.+?<h4>(.+?)</h4>').findall(videos)
+          for link, img, time, title in videos:
+            title = Util.normalizeText(title)
+            if len(time) > 0:
+              time = re.compile('<span class="videoTime">(.+?)</span>').findall(time)[0].split(':')
+              if len(time) == 1:
+                time = time[0].split('.')
+              if len(time) == 3:
+                time = (int(time[0]) * 3600) + (int(time[1]) * 60) + int(time[2])
+              else:
+                time = (int(time[0]) * 60) + int(time[1])
+            Util.addItem(self.__handle, title, img, '', 'video', { 'title' : title }, time, { 'id' : 'v', 'page' : link }, True)
+            self.__itemsNumber += 1
+
+          if videos == None or not videos:
+            xbmcgui.Dialog().ok(self.__namePlugin, Util.getTranslation(self.__idPlugin, 30003)) # Errore recupero video shows.
+
+        # Play video.
+        elif self.__params['id'] == 'v':
+          title = Util.normalizeText(re.compile('<meta property="og:title" content="(.+?)"/>').findall(response)[0])
+          img = re.compile('<meta property="og:image" content="(.+?)"/>').findall(response)[0]
+          descr = Util.normalizeText(Util.trimTags(re.compile('<meta property="og:description" content="(.+?)"/>').findall(response)[0]))
+          li = Util.createListItem(title, img, '', 'video', { 'title' : title, 'plot' : descr })
+          streams = re.compile("file: '(.+?)'").findall(response)
+          try:
+            xbmc.Player(xbmc.PLAYER_CORE_MPLAYER).play(streams[0], li)
+          except:
+            xbmc.Player(xbmc.PLAYER_CORE_MPLAYER).play(streams[1], li)
+
+    if self.__itemsNumber > 0:
+      xbmcplugin.endOfDirectory(self.__handle)
+
+
+  def __getLaCosaResponse(self, link):
+    return Util('http://www.beppegrillo.it/la_cosa{0}'.format(link)).getHtml()
+
 
 # Entry point.
 #startTime = datetime.datetime.now()
-
-handle = int(sys.argv[1])
-params = tools.urlParametersToDict(sys.argv[2])
-idPlugin = 'plugin.lacosa'
-
-if len(params) == 0: # Visualizzazione del menu.
-  # Diretta.
-  response = tools.getResponseUrl('http://www.beppegrillo.it/la_cosa')
-  if response != None:
-    phpPage = re.compile('<div class="box_bottom">.+?<script src="(.+?)">').findall(response)[0]
-    img = re.compile('<div class="logo">.+?<img.+?src="(.+?)".+?/>').findall(response)[0]
-    response = tools.getResponseUrl(phpPage)
-    if response != None:
-      url = re.compile('file: "(.+?)\.m3u8"').findall(response)[0] + '.m3u8'
-      tools.addLink(handle, tools.getTranslation(idPlugin, 30001), img, '', 'video', { 'title' : 'La Cosa', 'plot' : '', 'duration' : -1, 'director' : '' }, url) # Diretta.
-  # Show.
-  response = tools.getResponseUrl('http://www.beppegrillo.it/la_cosa/rubriche')
-  if response != None:
-    show = re.compile('<div class="icon_programmi"><a href="(.+?)"><img.+?src="(.+?)".+?/></a><h3.+?><a.+?>(.+?)</a></h3><div.+?><p>(.+?)</p>').findall(response)
-    for link, img, title, descr in show:
-      title = tools.normalizeText(title)
-      tools.addDir(handle, title, img, '', 'video', { 'title' : title, 'plot' : tools.normalizeText(tools.stripTags(descr)), 'duration' : -1, 'director' : '' }, { 'id' : 's', 'page' : link })
-  xbmcplugin.endOfDirectory(handle)
-else:
-  response = tools.getResponseUrl(params['page'])
-  if response != None:
-    if params['id'] == 's': # Visualizzazione video di uno show.
-      response = re.compile('<div.+?id="recenti_canale">(.+?)<div class="pagination">').findall(response)[0]
-      response = re.compile('<a class="videoThumbnail" href="(.+?)"><img.+?src="(.+?)".+?/>.+?</a><h4><a title="(.+?)"').findall(response)
-      for link, img, title in response:
-        title = tools.normalizeText(title)
-        tools.addDir(handle, title, img, '', 'video', { 'title' : title, 'plot' : '', 'duration' : -1, 'director' : '' }, { 'id' : 'v', 'page' : link, 'image' : img })
-      xbmcplugin.endOfDirectory(handle)
-    elif params['id'] == 'v': # Riproduzione del video.
-      title = tools.normalizeText(re.compile('<h2 class="icon_article_left_title">(.+?)</h2>').findall(response)[0])
-      descr = re.compile('<div class="icon_article_left_txt">(.+?)</div>').findall(response)[0]
-      li = tools.createListItem(title, params['image'], '', 'video', { 'title' : title, 'plot' : tools.normalizeText(tools.stripTags(descr)), 'duration' : -1, 'director' : '' })
-      streams = re.compile("file: '(.+?)'").findall(response)
-      try:
-        xbmc.Player(xbmc.PLAYER_CORE_MPLAYER).playStream(streams[0], li)
-      except:
-        xbmc.Player(xbmc.PLAYER_CORE_MPLAYER).playStream(streams[1], li)
-
-#print 'La cosa azione ' + str(datetime.datetime.now() - startTime)
+lc = LaCosa()
+del lc
+#print '{0} azione {1}'.format(self.__namePlugin, str(datetime.datetime.now() - startTime))
