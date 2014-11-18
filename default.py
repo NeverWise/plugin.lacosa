@@ -24,6 +24,7 @@ class LaCosa(object):
         if live != None:
           url = '{0}.m3u8'.format(re.compile('file: "(.+?)\.m3u8"').findall(live)[0])
           li = Util.createListItem(Util.getTranslation(30000), thumbnailImage = img, streamtype = 'video', infolabels = { 'title' : Util._addonName }) # Diretta.
+          li.addStreamInfo('video', { 'aspect': 1.78, 'codec' : 'h264', 'width' : 640, 'height' : 360 })
           items.append([url, li, False, False])
 
       # Shows.
