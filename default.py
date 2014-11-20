@@ -23,9 +23,8 @@ class LaCosa(object):
         live = Util(phpPage).getHtml()
         if live != None:
           url = '{0}.m3u8'.format(re.compile('file: "(.+?)\.m3u8"').findall(live)[0])
-          li = Util.createListItem(Util.getTranslation(30000), thumbnailImage = img, streamtype = 'video', infolabels = { 'title' : Util._addonName }) # Diretta.
-          li.addStreamInfo('video', { 'aspect': 1.78, 'codec' : 'h264', 'width' : 640, 'height' : 360 })
-          items.append([url, li, False, False])
+          li = Util.createListItem(Util.getTranslation(30000), thumbnailImage = img, streamtype = 'video', infolabels = { 'title' : Util._addonName }, isPlayable = True) # Diretta.
+          items.append([{ 'id' : 'd', 'page' : phpPage }, li, False, True])
 
       # Shows.
       shows = self._getLaCosaResponse('/rubriche')
@@ -85,6 +84,14 @@ class LaCosa(object):
             Util.playStream(self._handle, title, img, streams[0], 'video', { 'title' : title, 'plot' : descr })
           except:
             Util.playStream(self._handle, title, img, streams[1], 'video', { 'title' : title, 'plot' : descr })
+
+        # Diretta.
+        elif self._params['id'] == 'd':
+          live = Util(self._params['page']).getHtml()
+          if live != None:
+            url = '{0}.m3u8'.format(re.compile('file: "(.+?)\.m3u8"').findall(live)[0])
+            title = Util.getTranslation(30000)
+            Util.playStream(self._handle, title, path = url, streamtype = 'video', infolabels = { 'title' : title })
 
 
   def _getLaCosaResponse(self, link):
