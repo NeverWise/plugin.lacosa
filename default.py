@@ -1,6 +1,5 @@
 #!/usr/bin/python
-# -*- coding: utf-8 -*-
-import sys, re, xbmcgui#, datetime
+import re, sys, xbmcplugin, xbmcgui#, datetime
 from neverwise import Util
 
 
@@ -13,27 +12,25 @@ class LaCosa(object):
 
     if len(self._params) == 0: # Visualizzazione del menu.
 
-      items = []
-
       # Diretta.
       live = self._getLaCosaResponse('')
       if live != None:
-        phpPage = re.compile('<div class="box_bottom">.+?<script src="(.+?)">').findall(live)[0]
-        img = re.compile('<div class="logo.+?<img.+?src="(.+?)".+?/>').findall(live)[0]
-        live = Util(phpPage).getHtml()
+        phpPage = live.find('div', 'box_bottom').script['src']
+        img = live.find('img', 'logo')['src']
+        live = Util.getHtml(phpPage).renderContents()
         if live != None:
           url = '{0}.m3u8'.format(re.compile('file: "(.+?)\.m3u8"').findall(live)[0])
           li = Util.createListItem(Util.getTranslation(30000), thumbnailImage = img, streamtype = 'video', infolabels = { 'title' : Util._addonName }, isPlayable = True) # Diretta.
-          items.append([{ 'id' : 'd', 'page' : phpPage }, li, False, True])
+          xbmcplugin.addDirectoryItem(self._handle, url, li, False)
 
       # Shows.
       shows = self._getLaCosaResponse('/rubriche')
       if shows != None:
-        shows = re.compile('<div class="icon_programmi"> <a href="(.+?)"><img.+?src="(.+?)".+?/></a>.+?<a.+?>(.+?)</a>.+?<p>(.+?)</p>').findall(shows)
-        for link, img, title, descr in shows:
-          title = Util.normalizeText(title)
-          li = Util.createListItem(title, thumbnailImage = img, streamtype = 'video', infolabels = { 'title' : title, 'plot' : Util.normalizeText(Util.trimTags(descr)) })
-          items.append([{ 'id' : 's', 'page' : link }, li, True, True])
+        shows = shows.findAll('div', 'icon_programmi')
+        for show in shows:
+          title = Util.normalizeText(show.h3.a.text)
+          li = Util.createListItem(title, thumbnailImage = show.img['src'], streamtype = 'video', infolabels = { 'title' : title, 'plot' : Util.normalizeText(show.p.text) })
+          xbmcplugin.addDirectoryItem(self._handle, Util.formatUrl({ 'id' : 's', 'page' : show.a['href'] }), li, True)
 
       if (live == None or not live) and (shows == None or not shows): # Se sono vuoti oppure liste vuote.
         Util.showConnectionErrorDialog() # Errore connessione internet!
@@ -43,59 +40,50 @@ class LaCosa(object):
         xbmcgui.Dialog().ok(Util._addonName, Util.getTranslation(30002)) # Errore recupero shows.
 
       # Show items.
-      if len(items) > 0:
-        Util.addItems(self._handle, items)
+      if live != None or shows != None:
+        xbmcplugin.endOfDirectory(self._handle)
 
     else:
 
-      response = Util(self._params['page']).getHtml(True)
+      response = Util.getHtml(self._params['page'], True)
       if response != None:
 
         # Videos.
         if self._params['id'] == 's': # Visualizzazione video di uno show.
-          videos = re.compile('<div.+?id="recenti_canale">(.+?)<div class="pagination">').findall(response)[0]
-          videos = re.compile('<a class="videoThumbnail.+?href="(.+?)">.+?<img.+?src="(.+?)".+?/>.+?(<span class="videoTime">.+?</span>)?</a>.+?<h4>(.+?)</h4>').findall(videos)
-          items = []
-          for link, img, time, title in videos:
-            title = Util.normalizeText(title)
-            if len(time) > 0:
-              time = re.compile('<span class="videoTime">(.+?)</span>').findall(time)[0].split(':')
+          videos = response.find('div', id='recenti_canale').findAll('li')
+          for video in videos:
+            title = Util.normalizeText(video.h4.text)
+            time = video.find('span', 'videoTime')
+            if time != None:
+              time = time.text.split(':')
               if len(time) == 1:
                 time = time[0].split('.')
               if len(time) == 3:
                 time = (int(time[0]) * 3600) + (int(time[1]) * 60) + int(time[2])
               else:
                 time = (int(time[0]) * 60) + int(time[1])
-            li = Util.createListItem(title, thumbnailImage = img, streamtype = 'video', infolabels = { 'title' : title }, duration = time, isPlayable = True)
-            items.append([{ 'id' : 'v', 'page' : link }, li, False, True])
+            li = Util.createListItem(title, thumbnailImage = video.img['src'], streamtype = 'video', infolabels = { 'title' : title }, duration = time, isPlayable = True)
+            xbmcplugin.addDirectoryItem(self._handle, Util.formatUrl({ 'id' : 'v', 'page' : video.a['href'] }), li, False)
 
-          if len(items) > 0:
-            Util.addItems(self._handle, items)
+          if len(videos) > 0:
+            xbmcplugin.endOfDirectory(self._handle)
           else:
             xbmcgui.Dialog().ok(Util._addonName, Util.getTranslation(30003)) # Errore recupero video shows.
 
         # Play video.
         elif self._params['id'] == 'v':
-          title = Util.normalizeText(re.compile('<meta property="og:title" content="(.+?)"/>').findall(response)[0])
-          img = re.compile('<meta property="og:image" content="(.+?)"/>').findall(response)[0]
-          descr = Util.normalizeText(Util.trimTags(re.compile('<meta property="og:description" content="(.+?)"/>').findall(response)[0]))
-          streams = re.compile("file: '(.+?)'").findall(response)
+          title = Util.normalizeText(response.find('meta', { 'property' : 'og:title' })['content'])
+          img = response.find('meta', { 'property' : 'og:image' })['content']
+          descr = Util.normalizeText(response.find('meta', { 'property' : 'og:description' })['content'])
+          streams = re.compile("file: '(.+?)'").findall(response.renderContents())
           try:
             Util.playStream(self._handle, title, img, streams[0], 'video', { 'title' : title, 'plot' : descr })
           except:
             Util.playStream(self._handle, title, img, streams[1], 'video', { 'title' : title, 'plot' : descr })
 
-        # Diretta.
-        elif self._params['id'] == 'd':
-          live = Util(self._params['page']).getHtml()
-          if live != None:
-            url = '{0}.m3u8'.format(re.compile('file: "(.+?)\.m3u8"').findall(live)[0])
-            title = Util.getTranslation(30000)
-            Util.playStream(self._handle, title, path = url, streamtype = 'video', infolabels = { 'title' : title })
-
 
   def _getLaCosaResponse(self, link):
-    return Util('http://www.beppegrillo.it/la_cosa{0}'.format(link)).getHtml()
+    return Util.getHtml('http://www.beppegrillo.it/la_cosa{0}'.format(link))
 
 
 # Entry point.
