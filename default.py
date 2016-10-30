@@ -51,7 +51,7 @@ class LaCosa(object):
       if response.isSucceeded:
 
         # Videos.
-        if self._params['id'] == 's': # Visualizzazione video di uno show.
+        if self._params['id'] == 's': # Visualizzazione dei videos di uno show.
           videos = response.body.find('div', id='recenti_canale').findAll('li')
           for video in videos:
             title = video.h4.text
@@ -70,18 +70,26 @@ class LaCosa(object):
           if len(videos) > 0:
             xbmcplugin.endOfDirectory(self._handle)
           else:
-            xbmcgui.Dialog().ok(Util._addonName, Util.getTranslation(30003)) # Errore recupero video shows.
+            xbmcgui.Dialog().ok(Util._addonName, Util.getTranslation(30003)) # Errore recupero dei videos shows.
 
         # Play video.
         elif self._params['id'] == 'v':
           title = response.body.find('meta', { 'property' : 'og:title' })['content']
           img = response.body.find('meta', { 'property' : 'og:image' })['content']
           descr = response.body.find('meta', { 'property' : 'og:description' })['content']
-          streams = re.findall("',file: '(.+?)'", response.body.renderContents())
-          try:
-            Util.playStream(self._handle, title, img, streams[0], 'video', { 'title' : title, 'plot' : descr })
-          except:
-            Util.playStream(self._handle, title, img, streams[1], 'video', { 'title' : title, 'plot' : descr })
+          streams = response.body.find('iframe')['src']
+          response = Util.getResponseForRegEx(streams)
+          if response.isSucceeded:
+            streams = re.findall('mp4_[0-9]+":"(.*?)",', response.body)
+          found_stream = None
+          for stream in reversed(streams):
+            if stream != '':
+              found_stream = stream
+              break
+          if found_stream is not None:
+            Util.playStream(self._handle, title, img, found_stream, 'video', { 'title' : title, 'plot' : descr })
+          else:
+            Util.showVideoNotAvailableDialog() # Video non disponibile.
 
 
   def _getLaCosaResponse(self, link):
@@ -92,4 +100,4 @@ class LaCosa(object):
 #startTime = datetime.datetime.now()
 lc = LaCosa()
 del lc
-#print '{0} azione {1}'.format(Util._addonName, str(datetime.datetime.now() - startTime))
+#xbmc.log('{0} azione {1}'.format(Util._addonName, str(datetime.datetime.now() - startTime)))
