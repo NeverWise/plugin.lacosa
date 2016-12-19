@@ -1,27 +1,15 @@
 #!/usr/bin/python
-import re, sys, xbmcplugin, xbmcgui#, datetime
-from neverwise import Util
+import neverwise as nw, re, sys, xbmcplugin#, datetime
 
 
 class LaCosa(object):
 
   _handle = int(sys.argv[1])
-  _params = Util.urlParametersToDict(sys.argv[2])
+  _params = nw.urlParametersToDict(sys.argv[2])
 
   def __init__(self):
 
     if len(self._params) == 0: # Visualizzazione del menu.
-
-      # Diretta.
-      #live = self._getLaCosaResponse('')
-      #if live != None:
-      #  phpPage = live.find('div', 'box_bottom').script['src']
-      #  img = live.find('img', 'logo')['src']
-      #  live = Util.getHtml(phpPage).renderContents()
-      #  if live != None:
-      #    url = '{0}.m3u8'.format(re.compile('file: "(.+?)\.m3u8"').findall(live)[0])
-      #    li = Util.createListItem(Util.getTranslation(30000), thumbnailImage = img, streamtype = 'video', infolabels = { 'title' : Util._addonName }, isPlayable = True) # Diretta.
-      #    xbmcplugin.addDirectoryItem(self._handle, url, li, False)
 
       # Shows.
       shows = self._getLaCosaResponse('/rubriche')
@@ -29,25 +17,17 @@ class LaCosa(object):
         shows = shows.body.findAll('div', 'icon_programmi')
         for show in shows:
           title = show.h3.a.text
-          li = Util.createListItem(title, thumbnailImage = show.img['src'], streamtype = 'video', infolabels = { 'title' : title, 'plot' : show.p.text })
-          xbmcplugin.addDirectoryItem(self._handle, Util.formatUrl({ 'id' : 's', 'page' : show.a['href'] }), li, True)
+          li = nw.createListItem(title, thumbnailImage = show.img['src'], streamtype = 'video', infolabels = { 'title' : title, 'plot' : show.p.text })
+          xbmcplugin.addDirectoryItem(self._handle, nw.formatUrl({ 'id' : 's', 'page' : show.a['href'] }), li, True)
 
-      #if (live == None or not live) and (shows == None or not shows): # Se sono vuoti oppure liste vuote.
-      #  Util.showConnectionErrorDialog() # Errore connessione internet!
-      #elif live == None or not live:
-      #  xbmcgui.Dialog().ok(Util._addonName, Util.getTranslation(30001)) # Errore recupero stream diretta.
-      #el
       if shows == None or not shows:
-        xbmcgui.Dialog().ok(Util._addonName, Util.getTranslation(30002)) # Errore recupero shows.
-
-      # Show items.
-      #if live != None or shows != None:
-      if shows != None:
+        nw.showNotification(nw.getTranslation(30000)) # Errore recupero shows.
+      else:
         xbmcplugin.endOfDirectory(self._handle)
 
     else:
 
-      response = Util.getResponseBS(self._params['page'])
+      response = nw.getResponseBS(self._params['page'])
       if response.isSucceeded:
 
         # Videos.
@@ -64,40 +44,43 @@ class LaCosa(object):
                 time = (int(time[0]) * 3600) + (int(time[1]) * 60) + int(time[2])
               else:
                 time = (int(time[0]) * 60) + int(time[1])
-            li = Util.createListItem(title, thumbnailImage = video.img['src'], streamtype = 'video', infolabels = { 'title' : title }, duration = time, isPlayable = True)
-            xbmcplugin.addDirectoryItem(self._handle, Util.formatUrl({ 'id' : 'v', 'page' : video.a['href'] }), li, False)
+            li = nw.createListItem(title, thumbnailImage = video.img['src'], streamtype = 'video', infolabels = { 'title' : title }, duration = time, isPlayable = True)
+            xbmcplugin.addDirectoryItem(self._handle, nw.formatUrl({ 'id' : 'v', 'page' : video.a['href'] }), li, False)
 
           if len(videos) > 0:
             xbmcplugin.endOfDirectory(self._handle)
           else:
-            xbmcgui.Dialog().ok(Util._addonName, Util.getTranslation(30003)) # Errore recupero dei videos shows.
+            nw.showNotification(nw.getTranslation(30001)) # Errore recupero dei videos shows.
 
         # Play video.
         elif self._params['id'] == 'v':
           title = response.body.find('meta', { 'property' : 'og:title' })['content']
           img = response.body.find('meta', { 'property' : 'og:image' })['content']
           descr = response.body.find('meta', { 'property' : 'og:description' })['content']
-          streams = response.body.find('iframe')['src']
-          response = Util.getResponseForRegEx(streams)
-          if response.isSucceeded:
-            streams = re.findall('mp4_[0-9]+":"(.*?)",', response.body)
-          found_stream = None
-          for stream in reversed(streams):
-            if stream != '':
-              found_stream = stream
-              break
-          if found_stream is not None:
-            Util.playStream(self._handle, title, img, found_stream, 'video', { 'title' : title, 'plot' : descr })
+          streams = response.body.find('iframe')
+          if streams != None:
+            response = nw.getResponseForRegEx(streams['src'])
+            if response.isSucceeded:
+              streams = re.findall('mp4_[0-9]+":"(.*?)",', response.body)
+            found_stream = None
+            for stream in reversed(streams):
+              if stream != '':
+                found_stream = stream
+                break
+            if found_stream is not None:
+              nw.playStream(self._handle, title, img, found_stream, 'video', { 'title' : title, 'plot' : descr })
+            else:
+              nw.showVideoNotAvailable() # Video non disponibile.
           else:
-            Util.showVideoNotAvailableDialog() # Video non disponibile.
+            nw.showVideoNotAvailable() # Video non disponibile.
 
 
   def _getLaCosaResponse(self, link):
-    return Util.getResponseBS('http://www.beppegrillo.it/la_cosa{0}'.format(link))
+    return nw.getResponseBS('http://www.la-cosa.it{0}'.format(link))
 
 
 # Entry point.
 #startTime = datetime.datetime.now()
 lc = LaCosa()
 del lc
-#xbmc.log('{0} azione {1}'.format(Util._addonName, str(datetime.datetime.now() - startTime)))
+#xbmc.log('{0} azione {1}'.format(nw.addonName, str(datetime.datetime.now() - startTime)))
